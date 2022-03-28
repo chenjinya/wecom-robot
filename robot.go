@@ -1,6 +1,7 @@
 package wecom_robot
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -20,6 +21,11 @@ type WeComRobot struct {
 	Key string
 }
 
+func NewWeComRobot (key string) *WeComRobot{
+	return &WeComRobot{
+		Key: key,
+	}
+}
 func (w *WeComRobot) Notice(ctx context.Context, content string) error {
 	res, err := http.Post(fmt.Sprintf("https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=%s", w.Key),
 		"application/json",
@@ -73,7 +79,7 @@ func (w *WeComRobot) uploadToWecom(filepath string, filename string) (mediaID st
 		return "", err
 	}
 	var ret map[string]interface{}
-	_ = w.JSONUnmarshal(res, &ret)
+	_ = JSONUnmarshal(res, &ret)
 	if ret["media_id"] == nil {
 		return "", errors.New("media_id 不存在")
 	}
@@ -110,7 +116,7 @@ func (w *WeComRobot) UploadFile(url string, params map[string]string, nameField,
 	req.Header.Add("Content-Type", writer.FormDataContentType())
 
 	HTTPClient := &http.Client{
-		Timeout: 3 * time.Second,
+		Timeout: 10 * time.Second,
 	}
 	resp, err := HTTPClient.Do(req)
 	if err != nil {
@@ -124,9 +130,34 @@ func (w *WeComRobot) UploadFile(url string, params map[string]string, nameField,
 	}
 	return content, nil
 }
-func (w *WeComRobot) JSONUnmarshal(data []byte, v interface{}) error {
+
+func JSONUnmarshal(data []byte, v interface{}) error {
 	buffer := bytes.NewBuffer(data)
 	decoder := json.NewDecoder(buffer)
 	decoder.UseNumber()
 	return decoder.Decode(&v)
+}
+
+func ToCsvRow(rows ...string) string {
+	for i, v := range rows {
+		rows[i] = ReplaceComma(v)
+	}
+	return strings.Join(rows, ",") + "\n"
+}
+
+func MustAppendFile(filePath string, data string) {
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR|os.O_APPEND, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+	write := bufio.NewWriter(f)
+	_, _ = write.WriteString(data)
+	_ = write.Flush()
+}
+
+func ReplaceComma(s string) string {
+	return strings.ReplaceAll(s, ",", "，")
 }
